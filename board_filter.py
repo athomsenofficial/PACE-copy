@@ -1,65 +1,71 @@
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+import pandas as pd
 
-#Static closeout date = annual report due date
+
+# Static closeout date = annual report due date (PECD)
 SCODs = {
-    'AB': f'31-MAR',
-    'AMN': f'31-MAR',
-    'A1C': f'31-MAR',
-    'SRA': f'31-MAR',
-    'SSG': f'31-JAN',
-    'TSG': f'30-NOV',
-    'MSG': f'30-SEP',
-    'SMS': f'31-JUL'
+    'AB': '31-MAR',    # E1 to E2
+    'AMN': '31-MAR',   # E2 to E3
+    'A1C': '31-MAR',   # E3 to E4
+    'SRA': '31-MAR',   # E4 to E5 (BTZ/regular)
+    'SSG': '31-JAN',   # E5 to E6
+    'TSG': '30-NOV',   # E6 to E7
+    'MSG': '30-SEP',   # E7 to E8
+    'SMS': '31-JUL'    # E8 to E9
 }
 
-#Time in grade = how long you've been in a rank
+# Base month for TIG calculation (DOR requirement date)
 TIG = {
-    'AB': f'01-AUG',
-    'AMN': f'01-AUG',
-    'A1C': f'01-AUG',
-    'SRA': f'01-AUG',
-    'SSG': f'01-JUL',
-    'TSG': f'01-MAY',
-    'MSG': f'01-MAR',
-    'SMS': f'01-DEC'
+    'AB': '01-FEB',    # Chart shows 1 FEB for E1-E2
+    'AMN': '01-FEB',   # Chart shows 1 FEB for E2-E3
+    'A1C': '01-FEB',   # Chart shows 1 FEB for E3-E4
+    'SRA': '01-FEB',   # Chart shows 1 FEB for E4-E5
+    'SSG': '01-AUG',   # Chart shows 1 AUG for E5-E6
+    'TSG': '01-JUL',   # Chart shows 1 JUL for E6-E7
+    'MSG': '01-JUL',   # Chart shows 1 JUL for E7-E8
+    'SMS': '01-MAR'    # Chart shows 1 MAR for E8-E9
 }
 
+# Time in grade months required
 tig_months_required = {
-    'AB': 6,
-    'AMN': 6,
-    'A1C': 6,
-    'SRA': 6,
-    'SSG': 23,
-    'TSG': 24,
-    'MSG': 20,
-    'SMS': 21
+    'AB': 6,     # 21/6 months per chart
+    'AMN': 6,    # 22/6 months per chart
+    'A1C': 10,   # 23/6 months per chart (Note: Regular is 28 months, BTZ is different)
+    'SRA': 6,    # 24/6 months per chart
+    'SSG': 23,   # 23/23 months per chart
+    'TSG': 23,   # 24/23 months per chart (varies by cycle, using most common)
+    'MSG': 20,   # 20/20 months per chart
+    'SMS': 21    # 21/21 months per chart
 }
 
-#Total active federal military service date = time in military (years)
+# Total active federal military service date = time in military (years)
+# Based on TAFMSD/TIS REQUIRED column
 TAFMSD = {
-    'AB': 3,
-    'AMN': 3,
-    'A1C': 3,
-    'SRA': 3,
-    'SSG': 5,
-    'TSG': 8,
-    'MSG': 11,
-    'SMS': 14
+    'AB': 0.25,   # 3 months (1 AUG - 3 months = 1 MAY)
+    'AMN': 0.5,   # 6 months (1 AUG - 6 months = 1 FEB)
+    'A1C': 1.25,  # 15 months (1 AUG - 15 months)
+    'SRA': 3,     # 3 years per chart
+    'SSG': 5,     # 5 years per chart (1 JUL XX/5 YRS)
+    'TSG': 8,     # 8 years per chart (1 JUL XX/8 YRS)
+    'MSG': 11,    # 11 years per chart (1 MAR XX/11 YRS)
+    'SMS': 14     # 14 years per chart (1 DEC XX/14 YRS)
 }
 
-#manditory date of separation = the day you have to exit the military
+# Mandatory date of separation (MDOS column - must be on or after)
+# This is the base month for MDOS calculation
 mdos = {
-    'AB': f'01-SEP',
-    'AMN': f'01-SEP',
-    'A1C': f'01-SEP',
-    'SRA': f'01-SEP',
-    'SSG': f'01-AUG',
-    'TSG': f'01-AUG',
-    'MSG': f'01-APR',
-    'SMS': f'01-JAN'
+    'AB': '01-SEP',    # Per chart MDOS column
+    'AMN': '01-SEP',   # Per chart MDOS column
+    'A1C': '01-SEP',   # Per chart MDOS column
+    'SRA': '01-SEP',   # Per chart MDOS column
+    'SSG': '01-AUG',   # Per chart MDOS column
+    'TSG': '01-AUG',   # Per chart MDOS column
+    'MSG': '01-APR',   # Per chart MDOS column
+    'SMS': '01-JAN'    # Per chart MDOS column
 }
 
+# Main higher tenure (standard HYT limits, in years)
 main_higher_tenure = {
     'AB': 6,
     'AMN': 6,
@@ -71,6 +77,7 @@ main_higher_tenure = {
     'SMS': 26
 }
 
+# Exception higher tenure (extended HYT limits, in years)
 exception_higher_tenure = {
     'AB': 8,
     'AMN': 8,
@@ -82,6 +89,7 @@ exception_higher_tenure = {
     'SMS': 28
 }
 
+# CAFSC skill level mapping 5th digit of the AFSC: ex -3F0X1)
 cafsc_map = {
     'AB': '3',
     'AMN': '3',
@@ -119,6 +127,22 @@ re_codes = {
 exception_hyt_start_date = datetime(2023, 12, 8)
 exception_hyt_end_date = datetime(2026, 9,30)
 
+def _parse_date(value):
+    """Return ``datetime`` for a variety of Excel or string representations."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, pd.Timestamp):
+        return value.to_pydatetime()
+    if isinstance(value, (int, float)):
+        # Excel serial dates start at 1899-12-30
+        return pd.to_datetime(value, unit="D", origin="1899-12-30").to_pydatetime()
+    if isinstance(value, str):
+        return datetime.strptime(value, "%d-%b-%Y")
+    return None
+
+
 def cafsc_check(grade, cafsc, two_afsc, three_afsc, four_afsc):
     if cafsc is not None and len(cafsc) >= 6:
         if cafsc[1] == '8' or cafsc[1] == '9':
@@ -151,12 +175,10 @@ def cafsc_check(grade, cafsc, two_afsc, three_afsc, four_afsc):
 
 
 def btz_elgibility_check(date_of_rank, year):
-    cutoff_date = datetime.strptime(f'01-Feb-{year}', '%d-%b-%Y' )
-    if isinstance(date_of_rank, str):
-        btz_date_of_rank = datetime.strptime(date_of_rank, '%d-%b-%Y') + relativedelta(months=22)
-    else:
-        btz_date_of_rank = date_of_rank + relativedelta(months=22)
-    scod_date = datetime.strptime(f'{SCODs.get('SRA')}-{year}', '%d-%b-%Y')
+    date_of_rank = _parse_date(date_of_rank)
+    cutoff_date = datetime.strptime(f"01-Feb-{year}", "%d-%b-%Y")
+    btz_date_of_rank = date_of_rank + relativedelta(months=22)
+    scod_date = datetime.strptime(f"{SCODs.get('SRA')}-{year}", "%d-%b-%Y")
     if btz_date_of_rank <= cutoff_date:
         return True
     if cutoff_date < btz_date_of_rank <= scod_date:
@@ -164,12 +186,10 @@ def btz_elgibility_check(date_of_rank, year):
     return False
 
 def check_a1c_eligbility(date_of_rank, year):
-    cutoff_date = datetime.strptime(f'01-Feb-{year}', '%d-%b-%Y')
-    scod_date = datetime.strptime(f'{SCODs.get('SRA')}-{year}', '%d-%b-%Y')
-    if isinstance(date_of_rank, str):
-        standard_a1c_date_of_rank = datetime.strptime(date_of_rank, '%d-%b-%Y') + relativedelta(months=28)
-    else:
-        standard_a1c_date_of_rank = date_of_rank + relativedelta(months=28)
+    date_of_rank = _parse_date(date_of_rank)
+    cutoff_date = datetime.strptime(f"01-Feb-{year}", "%d-%b-%Y")
+    scod_date = datetime.strptime(f"{SCODs.get('SRA')}-{year}", "%d-%b-%Y")
+    standard_a1c_date_of_rank = date_of_rank + relativedelta(months=28)
     if standard_a1c_date_of_rank <= cutoff_date:
         return True
     if cutoff_date < standard_a1c_date_of_rank <= scod_date:
@@ -177,28 +197,25 @@ def check_a1c_eligbility(date_of_rank, year):
     return None
 
 def three_year_tafmsd_check(scod_as_datetime, tafmsd):
-    if isinstance(tafmsd, str):
-        tafmsd = datetime.strptime(tafmsd, "%d-%b-%Y")
-    adjusted_tafmsd = tafmsd + relativedelta(months=36)
-    if adjusted_tafmsd > scod_as_datetime:
+    tafmsd = _parse_date(tafmsd)
+    if tafmsd is None:
         return False
+    adjusted_tafmsd = tafmsd + relativedelta(months=36)
+    return adjusted_tafmsd > scod_as_datetime
 
 
 def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafmsd, re_status, cafsc, two_afsc, three_afsc, four_afsc):
     try:
-        if isinstance(date_of_rank, str):
-            date_of_rank = datetime.strptime(date_of_rank, "%d-%b-%Y")
-        if isinstance(uif_disposition_date, str):
-            uif_disposition_date = datetime.strptime(uif_disposition_date, "%d-%b-%Y")
-        if isinstance(tafmsd, str):
-            tafmsd = datetime.strptime(tafmsd, "%d-%b-%Y")
+        date_of_rank = _parse_date(date_of_rank)
+        uif_disposition_date = _parse_date(uif_disposition_date)
+        tafmsd = _parse_date(tafmsd)
 
         scod = f'{SCODs.get(grade)}-{year}'
         scod_as_datetime = datetime.strptime(scod, "%d-%b-%Y")
         tig_selection_month = f'{TIG.get(grade)}-{year}'
         formatted_tig_selection_month = datetime.strptime(tig_selection_month, "%d-%b-%Y")
         tig_eligibility_month = formatted_tig_selection_month - relativedelta(months=tig_months_required.get(grade))
-        tafmsd_required_date = formatted_tig_selection_month - relativedelta(years=TAFMSD.get(grade)-1)
+        tafmsd_required_date = formatted_tig_selection_month - relativedelta(years=TAFMSD.get(grade))
         hyt_date = tafmsd + relativedelta(years=main_higher_tenure.get(grade))
         mdos = formatted_tig_selection_month + relativedelta(months=1)
         btz_check = None
@@ -211,10 +228,10 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
                     return None
             elif eligibility_status == False:
                 return False, 'Failed A1C Check.'
-        if grade == 'A1C' or grade == 'AMN' or grade == 'AB':
+        if grade in ('A1C', 'AMN', 'AB'):
             if three_year_tafmsd_check(scod_as_datetime, tafmsd):
                 return False, 'Over 36 months TIS.'
-        if date_of_rank <= tig_eligibility_month:
+        if date_of_rank is None or date_of_rank > tig_eligibility_month:
             return False, f'TIG: < {tig_months_required.get(grade)} months'
         if tafmsd > tafmsd_required_date:
             return False, f'TIS < {TAFMSD.get(grade)} years'
@@ -222,11 +239,15 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
             hyt_date += relativedelta(years=2)
         if hyt_date < mdos:
             return False, 'Higher tenure.'
-        if uif_code > 1 and uif_disposition_date < scod_as_datetime:
+        try:
+            uif_code = int(uif_code)
+        except (TypeError, ValueError):
+            uif_code = 0
+        if uif_code > 1 and uif_disposition_date and uif_disposition_date < scod_as_datetime:
             return False, f'UIF code: {uif_code}'
         if re_status in re_codes.keys():
             return False, f'{re_status}: {re_codes.get(re_status)}'
-        if grade != 'SMS' or 'MSG':
+        if grade not in ('SMS', 'MSG'):
             if cafsc_check(grade, cafsc, two_afsc, three_afsc, four_afsc) is False:
                 return False, 'Insufficient CAFSC skill level.'
         if btz_check is not None and btz_check == True:
