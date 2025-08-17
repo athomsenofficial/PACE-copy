@@ -3,7 +3,7 @@ from accounting_date_check import accounting_date_check
 from board_filter import board_filter
 from session_manager import update_session, get_session
 
-required_columns = ['FULL_NAME', 'GRADE', 'ASSIGNED_PAS_CLEARTEXT', 'DAFSC', 'DOR', 'DATE_ARRIVED_STATION', 'TAFMSD','REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'CAFSC']
+required_columns = ['FULL_NAME', 'GRADE', 'ASSIGNED_PAS_CLEARTEXT', 'DAFSC', 'DOR', 'DATE_ARRIVED_STATION', 'TAFMSD','REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'PAFSC']
 optional_columns = ['GRADE_PERM_PROJ', 'UIF_CODE', 'UIF_DISPOSITION_DATE', '2AFSC', '3AFSC', '4AFSC']
 pdf_columns = ['FULL_NAME','GRADE', 'DATE_ARRIVED_STATION','DAFSC', 'ASSIGNED_PAS_CLEARTEXT', 'DOR', 'TAFMSD', 'ASSIGNED_PAS']
 
@@ -65,7 +65,7 @@ def roster_processor(roster_df, session_id, cycle, year):
         if row['GRADE'] == cycle or (row['GRADE'] == 'A1C' and cycle == 'SRA'):
             member_status = board_filter(row['GRADE'], year, row['DOR'], row['UIF_CODE'],
                                          row['UIF_DISPOSITION_DATE'], row['TAFMSD'], row['REENL_ELIG_STATUS'],
-                                         row['CAFSC'], row['2AFSC'], row['3AFSC'], row['4AFSC'])
+                                         row['PAFSC'], row['2AFSC'], row['3AFSC'], row['4AFSC'])
             if member_status is None:
                 continue
             elif member_status == True:
