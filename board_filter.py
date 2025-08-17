@@ -89,13 +89,13 @@ exception_higher_tenure = {
     'SMS': 28
 }
 
-# CAFSC skill level mapping 5th digit of the AFSC: ex -3F0X1)
-cafsc_map = {
+# pafsc skill level mapping 5th digit of the AFSC: ex -3F0X1)
+pafsc_map = {
     'AB': '3',
     'AMN': '3',
     'A1C': '3',
     'SRA': '5',
-    'SSG': '5',
+    'SSG': '7',
     'TSG': '7',
     'MSG': '7',
     'SMS': '9'
@@ -141,33 +141,30 @@ def _parse_date(value):
     return None
 
 
-def cafsc_check(grade, cafsc, two_afsc, three_afsc, four_afsc):
-    if cafsc is not None and len(cafsc) >= 6:
-        if cafsc[1] == '8' or cafsc[1] == '9':
-            return None
-        if cafsc[4] >= cafsc_map.get(grade):
-            return True
-        elif isinstance(two_afsc, str) and two_afsc is not None:
-            if len(two_afsc) == 6:
-                if two_afsc[4] >= cafsc_map.get(grade):
+def pafsc_check(grade, pafsc, two_afsc, three_afsc, four_afsc):
+    if pafsc and pafsc[0] in ('8', '9'):
+        return None
+
+    required_level = pafsc_map.get(grade)
+    if not required_level:
+        return False
+
+    afscs = [pafsc, two_afsc, three_afsc, four_afsc]
+
+    for afsc in afscs:
+        if isinstance(afsc, str) and len(afsc) >= 5:
+            # Determine the index for the skill level character
+            # Index 4 for AFSCs with a letter or '-' at the beginning
+            # Index 3 for AFSCs with a number at the beginning
+            skill_level_index = 4 if afsc[0].isalpha() or afsc[0] == '-' else 3
+
+            try:
+                if afsc[skill_level_index] >= required_level:
                     return True
-            elif len(two_afsc) == 5:
-                if two_afsc[3] >= cafsc_map.get(grade):
-                    return True
-        elif isinstance(three_afsc, str) and three_afsc is not None:
-            if len(three_afsc) == 6:
-                if three_afsc[4] >= cafsc_map.get(grade):
-                    return True
-            elif len(three_afsc) == 5:
-                if three_afsc[3] >= cafsc_map.get(grade):
-                    return True
-        elif isinstance(four_afsc, str) and four_afsc is not None:
-            if len(four_afsc) == 6:
-                if four_afsc[4] >= cafsc_map.get(grade):
-                    return True
-            elif len(four_afsc) == 5:
-                if four_afsc[3] >= cafsc_map.get(grade):
-                    return True
+            except IndexError:
+                # Handle cases where the string might be too short for the determined index
+                continue
+
     return False
 
 
@@ -202,7 +199,7 @@ def three_year_tafmsd_check(scod_as_datetime, tafmsd):
     return adjusted_tafmsd > scod_as_datetime
 
 
-def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafmsd, re_status, cafsc, two_afsc, three_afsc, four_afsc):
+def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafmsd, re_status, pafsc, two_afsc, three_afsc, four_afsc):
     try:
         date_of_rank = _parse_date(date_of_rank)
         uif_disposition_date = _parse_date(uif_disposition_date)
@@ -246,8 +243,8 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
         if re_status in re_codes.keys():
             return False, f'{re_status}: {re_codes.get(re_status)}'
         if grade not in ('SMS', 'MSG'):
-            if cafsc_check(grade, cafsc, two_afsc, three_afsc, four_afsc) is False:
-                return False, 'Insufficient CAFSC skill level.'
+            if pafsc_check(grade, pafsc, two_afsc, three_afsc, four_afsc) is False:
+                return False, 'Insufficient PAFSC skill level.'
         if btz_check is not None and btz_check == True:
             return True, 'btz'
         return True
