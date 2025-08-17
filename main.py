@@ -40,7 +40,7 @@ async def upload_file(
     return_object = {}
 
     required_columns = ['FULL_NAME', 'GRADE', 'ASSIGNED_PAS_CLEARTEXT', 'DAFSC', 'DOR', 'DATE_ARRIVED_STATION',
-                        'TAFMSD', 'REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'CAFSC']
+                        'TAFMSD', 'REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'PAFSC']
     optional_columns = ['GRADE_PERM_PROJ', 'UIF_CODE', 'UIF_DISPOSITION_DATE', '2AFSC', '3AFSC', '4AFSC']
     pdf_columns = ['FULL_NAME', 'GRADE', 'DATE_ARRIVED_STATION', 'DAFSC', 'ASSIGNED_PAS_CLEARTEXT', 'DOR', 'TAFMSD', 'ASSIGNED_PAS']
 
@@ -146,7 +146,7 @@ async def upload_file(
     return_object = {}
 
     required_columns = ['FULL_NAME', 'GRADE', 'ASSIGNED_PAS_CLEARTEXT', 'DAFSC', 'DOR', 'DATE_ARRIVED_STATION',
-                        'TAFMSD', 'REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'CAFSC']
+                        'TAFMSD', 'REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'PAFSC']
     optional_columns = ['GRADE_PERM_PROJ', 'UIF_CODE', 'UIF_DISPOSITION_DATE', '2AFSC', '3AFSC', '4AFSC']
     pdf_columns = ['FULL_NAME', 'GRADE', 'DATE_ARRIVED_STATION', 'DAFSC', 'ASSIGNED_PAS_CLEARTEXT', 'DOR', 'TAFMSD', 'ASSIGNED_PAS']
 
