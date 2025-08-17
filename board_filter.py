@@ -117,8 +117,6 @@ re_codes = {
     "2X": "Not selected for Reenlistment.",
     "4H": "Article 15.",
     "4I": "Control Roster.",
-    "4J": "AF Weight Management Program.",
-    "4K": "Medically disqualified",
     "4L": "Separated, Commissioning program.",
     "4M": "Breach of enlistment.",
     "4N": "Convicted, Civil Court."
