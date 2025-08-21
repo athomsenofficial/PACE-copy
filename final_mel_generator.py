@@ -17,39 +17,22 @@ from PyPDF2 import PdfMerger
 import pandas as pd
 
 from session_manager import get_session
+from constants import (
+    SCODS, PROMOTION_MAP, ELIGIBLE_TABLE_WIDTHS, INELIGIBLE_TABLE_WIDTHS,
+    ELIGIBLE_HEADER_ROW, INELIGIBLE_HEADER_ROW, DATE_FORMAT_DISPLAY,
+    MAX_NAME_LENGTH, PDF_FONTS
+)
 
-# Register Calibri fonts
-base_dir = os.path.dirname(os.path.abspath(__file__))
-calibri_path = os.path.join(base_dir, 'fonts', 'calibri.ttf')
-calibrib_path = os.path.join(base_dir, 'fonts', 'calibrib.ttf')
-
-# Register Calibri fonts
-pdfmetrics.registerFont(TTFont('Calibri', calibri_path))
-pdfmetrics.registerFont(TTFont('Calibri-Bold', calibrib_path))
-
-
-promotion_map = {
-    "SRA": "E5",
-    "SSG": "E6",
-    "TSG": "E7",
-    "MSG": "E8",
-    "SMS": "E9"
-}
-
-SCODs = {'SRA': f'31-MAR',
-         'SSG': f'31-JAN',
-         'TSG': f'30-NOV',
-         'MSG': f'30-SEP',
-         'SMS': f'31-JUL'
-         }
+# Get font names from the pre-registered fonts
+BODY_FONT, BOLD_FONT = PDF_FONTS
 
 
 def get_accounting_date(grade, year):
-    scod = f'{SCODs.get(grade)}-{year}'
+    scod = f'{SCODS.get(grade)}-{year}'
     formatted_scod_date = datetime.strptime(scod, "%d-%b-%Y")
     accounting_date = formatted_scod_date - relativedelta(days=120 - 1)
     adjusted_accounting_date = accounting_date.replace(day=3).replace(hour=23, minute=59, second=59)
-    return adjusted_accounting_date.strftime("%d %B %Y")
+    return adjusted_accounting_date.strftime(DATE_FORMAT_DISPLAY)
 
 
 class FinalMELDocument(BaseDocTemplate):
@@ -93,7 +76,7 @@ class FinalMELDocument(BaseDocTemplate):
 
     def add_header(self, canvas, doc):
         # CUI Header at the very top
-        canvas.setFont('Helvetica-Bold', 10)
+        canvas.setFont(BOLD_FONT, 10)
         canvas.drawCentredString(
             self.page_width / 2,
             self.page_height - 0.3 * inch,
@@ -110,13 +93,13 @@ class FinalMELDocument(BaseDocTemplate):
             logo.drawOn(canvas, 0.5 * inch, header_top - 0.8 * inch)
 
         # Title "Unit Data"
-        canvas.setFont('Calibri-Bold', 12)
+        canvas.setFont(BOLD_FONT, 12)
         text_start_x = 2 * inch
         title_y = header_top + 0.1 * inch
         canvas.drawString(text_start_x, title_y, "Unit Data")
 
         # PAS Information
-        canvas.setFont('Calibri-Bold', 10)
+        canvas.setFont(BOLD_FONT, 10)
         line_height = 0.2 * inch
         text_start_y = header_top - 0.1 * inch
 
@@ -127,7 +110,7 @@ class FinalMELDocument(BaseDocTemplate):
 
         if not doc.pas_info['pn'] == 'NA':
             # Promotion Key Title
-            canvas.setFont('Calibri-Bold', 12)
+            canvas.setFont(BOLD_FONT, 12)
             text_start_x = 5 * inch
             canvas.drawString(text_start_x, title_y, "Promotion Eligibility Data")
 
@@ -143,7 +126,7 @@ class FinalMELDocument(BaseDocTemplate):
             canvas.drawString(text_start_x, text_start_y - 2 * line_height, f"UNIT SIZE: {unit_size_txt}")
 
         # Signature Block
-        canvas.setFont('Calibri-Bold', 12)
+        canvas.setFont(BOLD_FONT, 12)
         text_start_s = 7.5 * inch
         line_height_s = 0.2 * inch
         title_s = header_top - 0.5 * inch
@@ -161,7 +144,7 @@ class FinalMELDocument(BaseDocTemplate):
             "criminal and/or civil penalties."
         )
 
-        canvas.setFont('Calibri-Bold', 8)
+        canvas.setFont(BOLD_FONT, 8)
         x = 0.5 * inch
         y = 0.75 * inch
 
@@ -174,7 +157,7 @@ class FinalMELDocument(BaseDocTemplate):
         max_width = self.page_width - inch
 
         for word in words:
-            word_width = stringWidth(word + ' ', 'Calibri-Bold', 8)
+            word_width = stringWidth(word + ' ', BOLD_FONT, 8)
             if current_width + word_width <= max_width:
                 current_line.append(word)
                 current_width += word_width
@@ -188,7 +171,7 @@ class FinalMELDocument(BaseDocTemplate):
 
         # Draw footer lines centered
         for i, line in enumerate(lines):
-            line_width = stringWidth(line, 'Calibri', 8)
+            line_width = stringWidth(line, BOLD_FONT, 8)
             center_x = (self.page_width - line_width) / 2
             canvas.drawString(center_x, y + (len(lines) - 1 - i) * 10, line)
 
@@ -198,23 +181,23 @@ class FinalMELDocument(BaseDocTemplate):
 
         # Left: Date
         canvas.setFont('Calibri-Bold', 12)
-        canvas.drawString(x, bottom_y, datetime.now().strftime('%d %B %Y'))
+        canvas.drawString(x, bottom_y, datetime.now().strftime(DATE_FORMAT_DISPLAY))
 
         # Center: CUI and identifier
         cui_text = "CUI"
-        cui_width = stringWidth(cui_text, 'Calibri-Bold', 12)
+        cui_width = stringWidth(cui_text, BOLD_FONT, 12)
         cui_center_x = (self.page_width / 2) - (cui_width / 2)
         canvas.drawString(cui_center_x, bottom_y, cui_text)
 
         # Final MEL
-        identifier_text = f"{str(self.melYear + 1)[-2:]}{promotion_map[self.cycle]} - Final MEL"
-        identifier_width = stringWidth(identifier_text, 'Calibri-Bold', 12)
+        identifier_text = f"{str(self.melYear + 1)[-2:]}{PROMOTION_MAP[self.cycle]} - Final MEL"
+        identifier_width = stringWidth(identifier_text, BOLD_FONT, 12)
         identifier_center_x = (self.page_width / 2) - (identifier_width / 2)
         canvas.drawString(identifier_center_x, bottom_y - 18, identifier_text)
 
         # Right: Page numbers
         page_text = f"Accounting Date: {get_accounting_date(self.cycle, self.melYear)}"
-        page_width = stringWidth(page_text, 'Calibri-Bold', 12)
+        page_width = stringWidth(page_text, BOLD_FONT, 12)
         canvas.drawString(self.page_width - 0.5 * inch - page_width, bottom_y, page_text)
 
 
@@ -223,8 +206,7 @@ def create_final_mel_table(doc, data, header, table_type=None, count=None):
     table_width = doc.page_width - inch
 
     # Column widths for eligible table
-    # Format: [NAME, GRADE, PASCODE, DAFSC, UNIT, NRN, P, MP, PN]
-    col_widths = [table_width * x for x in [0.26, 0.08, 0.1, 0.1, 0.26, 0.05, 0.05, 0.05, 0.05]]
+    col_widths = [table_width * x for x in ELIGIBLE_TABLE_WIDTHS]
 
     # Process data to include empty cells for checkboxes
     processed_data = []
@@ -252,13 +234,13 @@ def create_final_mel_table(doc, data, header, table_type=None, count=None):
         # Header styling (for both status row and column headers)
         ('BACKGROUND', (0, 0), (-1, repeat_rows - 1), dark_blue),
         ('TEXTCOLOR', (0, 0), (-1, repeat_rows - 1), colors.white),
-        ('FONTNAME', (0, 0), (-1, repeat_rows - 1), 'Calibri-Bold'),
+        ('FONTNAME', (0, 0), (-1, repeat_rows - 1), BOLD_FONT),
         ('FONTSIZE', (0, 0), (-1, repeat_rows - 1), 12),
         ('BOTTOMPADDING', (0, 0), (-1, repeat_rows - 1), 4),
         ('ROWHEIGHT', (0, 0), (-1, -1), 30),
 
         # Data rows styling
-        ('FONTNAME', (0, repeat_rows), (-1, -1), 'Calibri'),
+        ('FONTNAME', (0, repeat_rows), (-1, -1), BODY_FONT),
         ('FONTSIZE', (0, repeat_rows), (-1, -1), 10),
         ('LINEBELOW', (0, 0), (-1, -1), .5, colors.lightgrey),
 
@@ -290,8 +272,7 @@ def create_ineligible_table(doc, data, header, table_type=None, count=None):
     table_width = doc.page_width - inch
 
     # Column widths for ineligible table
-    # Format: [NAME, GRADE, PASCODE, DAFSC, UNIT, REASON NOT ELIGIBLE]
-    col_widths = [table_width * x for x in [0.25, 0.08, 0.1, 0.1, 0.25, 0.2]]
+    col_widths = [table_width * x for x in INELIGIBLE_TABLE_WIDTHS]
 
     # Prepare table data
     table_data = [header] + data
@@ -438,7 +419,9 @@ def add_interactive_checkboxes(pdf_path, eligible_data, pascode):
 
         return pdf_path
 
-def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, senior_rater, senior_raters, is_last, cycle, melYear, pascode, pas_info,
+
+def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, senior_rater, senior_raters, is_last, cycle,
+                           melYear, pascode, pas_info,
                            output_filename, logo_path):
     """Generate a PDF for a single pascode for final MEL with interactive form fields"""
     # Standard columns we know about
@@ -477,10 +460,6 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
 
     elements = []
 
-    # Header rows
-    eligible_header_row = ['FULL NAME', 'GRADE', 'PASCODE', 'DAFSC', 'UNIT', 'NRN', 'P', 'MP', 'PN']
-    ineligible_header_row = ['FULL NAME', 'GRADE', 'PASCODE', 'DAFSC', 'UNIT', 'REASON NOT ELIGIBLE']
-
     # Process eligible data
     processed_eligible_data = []
     if eligible_data:
@@ -491,8 +470,8 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
 
             # Extract data safely with defaults for missing fields
             name = str(row[name_idx]) if name_idx < len(row) else "Unknown"
-            if len(name) > 30:
-                name = name[:27] + "..."
+            if len(name) > MAX_NAME_LENGTH:
+                name = name[:MAX_NAME_LENGTH - 3] + "..."
 
             grade = str(row[grade_idx]) if grade_idx < len(row) else "Unknown"
             dafsc = str(row[dafsc_idx]) if dafsc_idx < len(row) else "Unknown"
@@ -508,7 +487,7 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
             table = create_final_mel_table(
                 doc,
                 data=processed_eligible_data,
-                header=eligible_header_row,
+                header=ELIGIBLE_HEADER_ROW,
                 table_type="ELIGIBLE",
                 count=len(processed_eligible_data)
             )
@@ -528,8 +507,8 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
 
             # Extract data safely with defaults for missing fields
             name = str(row[name_idx]) if name_idx < len(row) else "Unknown"
-            if len(name) > 30:
-                name = name[:27] + "..."
+            if len(name) > MAX_NAME_LENGTH:
+                name = name[:MAX_NAME_LENGTH - 3] + "..."
 
             grade = str(row[grade_idx]) if grade_idx < len(row) else "Unknown"
             dafsc = str(row[dafsc_idx]) if dafsc_idx < len(row) else "Unknown"
@@ -555,7 +534,7 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
             table = create_ineligible_table(
                 doc,
                 data=processed_ineligible_data,
-                header=ineligible_header_row,
+                header=INELIGIBLE_HEADER_ROW,
                 table_type="INELIGIBLE",
                 count=len(processed_ineligible_data)
             )
@@ -585,7 +564,6 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
             "is_small_unit": is_last
         }
 
-
         doc2.logo_path = logo_path
 
         elements = []
@@ -593,7 +571,7 @@ def generate_final_mel_pdf(eligible_data, ineligible_data, small_unit_data, seni
         table = create_final_mel_table(
             doc2,
             data=srid_list,
-            header=eligible_header_row,
+            header=ELIGIBLE_HEADER_ROW,
             table_type="SENIOR RATER",
             count=len(srid_list)
         )
@@ -637,7 +615,6 @@ def merge_pdfs(temp_pdfs, session_id):
             headers={"Content-Disposition": "attachment; filename=initial_mel_roster.pdf"}
         )
 
-
     except Exception as e:
         print(f"Error during PDF merge or Redis store: {e}")
     finally:
@@ -647,6 +624,7 @@ def merge_pdfs(temp_pdfs, session_id):
                 os.remove(path)
             except Exception as e:
                 print(f"Warning: could not delete {path}: {e}")
+
 
 def generate_final_roster_pdf(session_id,
                               output_filename="final_military_roster.pdf",
@@ -701,8 +679,8 @@ def generate_final_roster_pdf(session_id,
             eligible_candidates = len(pascode_eligible)
 
         # Determine if this is a small unit (10 or fewer eligible members)
-        is_small_unit = eligible_candidates <= 10
-
+        from constants import SMALL_UNIT_THRESHOLD
+        is_small_unit = eligible_candidates <= SMALL_UNIT_THRESHOLD
 
         must_promote, promote_now = get_promotion_eligibility(eligible_candidates, cycle)
         pas_info = {
@@ -720,7 +698,7 @@ def generate_final_roster_pdf(session_id,
         # Create temporary filename
         temp_filename = f"temp_final_{pascode}.pdf"
         is_last = (pascode == unique_pascodes[-1])
-        
+
         # Generate PDF for this pascode with interactive form fields
         temp_pdf = generate_final_mel_pdf(
             pascode_eligible,
@@ -757,10 +735,8 @@ def generate_final_roster_pdf(session_id,
             )
             temp_pdfs.append(sr_temp_pdf)
 
-
-
     # Merge all the temporary PDFs into the final output file
     if temp_pdfs:
-        return merge_pdfs(temp_pdfs, session_id) 
-    else: 
+        return merge_pdfs(temp_pdfs, session_id)
+    else:
         return None
