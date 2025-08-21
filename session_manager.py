@@ -6,14 +6,13 @@ import redis
 import pandas as pd
 from dotenv import load_dotenv
 import base64
+from constants import SESSION_TTL_SECONDS
 
 load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL")
 r = redis.from_url(REDIS_URL, decode_responses=True)
-# user_sessions = {}
 
-SESSION_TTL_SECONDS = 1800
 
 def create_session(processed_df: pd.DataFrame, pdf_df: pd.DataFrame):
     session_id = str(uuid.uuid4())
@@ -35,11 +34,13 @@ def create_session(processed_df: pd.DataFrame, pdf_df: pd.DataFrame):
     r.set(session_id, json.dumps(session_data), ex=SESSION_TTL_SECONDS)
     return session_id
 
+
 def get_session(session_id):
     raw = r.get(session_id)
     if not raw:
         return None
     return json.loads(raw)
+
 
 def update_session(session_id, **kwargs):
     session = r.get(session_id)
@@ -57,12 +58,15 @@ def update_session(session_id, **kwargs):
     r.set(session_id, json.dumps(session), ex=SESSION_TTL_SECONDS)
     return session
 
+
 def delete_session(session_id):
     r.delete(session_id)
+
 
 def store_pdf_in_redis(session_id: str, pdf_buffer: BytesIO):
     encoded = base64.b64encode(pdf_buffer.getvalue()).decode("utf-8")
     r.set(f"{session_id}_pdf", encoded, ex=SESSION_TTL_SECONDS)
+
 
 def get_pdf_from_redis(session_id: str) -> BytesIO | None:
     encoded = r.get(f"{session_id}_pdf")
