@@ -88,7 +88,7 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
 
         scod = f'{SCODS.get(grade)}-{year}'
         scod_as_datetime = datetime.strptime(scod, "%d-%b-%Y")
-        tig_selection_month = f'{TIG.get(grade)}-{year}'
+        tig_selection_month = f'{TIG.get(grade)}-{year + 1}'
         formatted_tig_selection_month = datetime.strptime(tig_selection_month, "%d-%b-%Y")
         tig_eligibility_month = formatted_tig_selection_month - relativedelta(months=TIG_MONTHS_REQUIRED.get(grade))
         tafmsd_required_date = formatted_tig_selection_month - relativedelta(years=TAFMSD.get(grade))
