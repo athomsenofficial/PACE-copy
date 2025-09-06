@@ -194,6 +194,3 @@ def get_promotion_eligibility(total_eligible, rank='SrA'):
 
     # If no matching range is found
     return 'NA', 'NA'
-
-
-mp,pn = get_promotion_eligibility(24, 'SSG')

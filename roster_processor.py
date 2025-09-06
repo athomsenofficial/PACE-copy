@@ -2,28 +2,11 @@ import pandas as pd
 from accounting_date_check import accounting_date_check
 from board_filter import board_filter
 from session_manager import update_session, get_session
+from constants import (
+    REQUIRED_COLUMNS, OPTIONAL_COLUMNS, PDF_COLUMNS, BOARDS,
+    GRADE_MAP, PROMOTIONAL_MAP, SMALL_UNIT_THRESHOLD, MAX_NAME_LENGTH, MAX_UNIT_LENGTH
+)
 
-required_columns = ['FULL_NAME', 'GRADE', 'ASSIGNED_PAS_CLEARTEXT', 'DAFSC', 'DOR', 'DATE_ARRIVED_STATION', 'TAFMSD','REENL_ELIG_STATUS', 'ASSIGNED_PAS', 'PAFSC']
-optional_columns = ['GRADE_PERM_PROJ', 'UIF_CODE', 'UIF_DISPOSITION_DATE', '2AFSC', '3AFSC', '4AFSC']
-pdf_columns = ['FULL_NAME','GRADE', 'DATE_ARRIVED_STATION','DAFSC', 'ASSIGNED_PAS_CLEARTEXT', 'DOR', 'TAFMSD', 'ASSIGNED_PAS']
-
-boards = ['E5', 'E6', 'E7', 'E8', 'E9']
-
-grade_map = {
-    "SRA": "E4",
-    "SSG": "E5",
-    "TSG": "E6",
-    "MSG": "E7",
-    "SMS": "E8"
-}
-
-promotional_map = {
-    'SRA': 'SSG',
-    'SSG': 'TSG',
-    'TSG': 'MSG',
-    'MSG': 'SMS',
-    'SMS': 'CMS'
-}
 
 def roster_processor(roster_df, session_id, cycle, year):
     eligible_service_members = []
@@ -39,12 +22,12 @@ def roster_processor(roster_df, session_id, cycle, year):
 
     error_log = []
 
-    filtered_roster_df = roster_df[required_columns + optional_columns]
-    pdf_roster = filtered_roster_df[pdf_columns]
+    filtered_roster_df = roster_df[REQUIRED_COLUMNS + OPTIONAL_COLUMNS]
+    pdf_roster = filtered_roster_df[PDF_COLUMNS]
 
     for index, row in filtered_roster_df.iterrows():
         for column, value in row.items():
-            if pd.isna(value) and column in required_columns:
+            if pd.isna(value) and column in REQUIRED_COLUMNS:
                 error_log.append(rf"error at {index}, {column}")
                 break
             if isinstance(value, pd.Timestamp):
@@ -53,14 +36,14 @@ def roster_processor(roster_df, session_id, cycle, year):
         valid_member = accounting_date_check(row['DATE_ARRIVED_STATION'], cycle, year)
         if not valid_member:
             continue
-        if row['ASSIGNED_PAS'] not in pascodes: 
+        if row['ASSIGNED_PAS'] not in pascodes:
             pascodes.append(row['ASSIGNED_PAS'])
             pascodeUnitMap[row['ASSIGNED_PAS']] = row['ASSIGNED_PAS_CLEARTEXT']
         if row['GRADE_PERM_PROJ'] == cycle:
             ineligible_service_members.append(index)
             reason_for_ineligible_map[index] = f'Projected for {cycle}.'
             continue
-        elif row['GRADE_PERM_PROJ'] == promotional_map.get(cycle):
+        elif row['GRADE_PERM_PROJ'] == PROMOTIONAL_MAP.get(cycle):
             continue
         if row['GRADE'] == cycle or (row['GRADE'] == 'A1C' and cycle == 'SRA'):
             member_status = board_filter(row['GRADE'], year, row['DOR'], row['UIF_CODE'],
@@ -87,9 +70,9 @@ def roster_processor(roster_df, session_id, cycle, year):
     eligible_df = pdf_roster.loc[eligible_service_members]
     for column in eligible_df.columns:
         if column == 'ASSIGNED_PAS_CLEARTEXT':
-            eligible_df['ASSIGNED_PAS_CLEARTEXT'] = eligible_df['ASSIGNED_PAS_CLEARTEXT'].str[:25]
+            eligible_df['ASSIGNED_PAS_CLEARTEXT'] = eligible_df['ASSIGNED_PAS_CLEARTEXT'].str[:MAX_UNIT_LENGTH]
         if column == 'FULL_NAME':
-            eligible_df['FULL_NAME'] = eligible_df['FULL_NAME'].str[:25]
+            eligible_df['FULL_NAME'] = eligible_df['FULL_NAME'].str[:MAX_UNIT_LENGTH]
         if pd.api.types.is_datetime64_any_dtype(eligible_df[column].dtype):
             eligible_df[column] = eligible_df[column].dt.strftime('%d-%b-%Y').str.upper()
 
@@ -97,25 +80,24 @@ def roster_processor(roster_df, session_id, cycle, year):
     ineligible_df['REASON'] = ineligible_df.index.map(reason_for_ineligible_map)
     for column in ineligible_df.columns:
         if column == 'ASSIGNED_PAS_CLEARTEXT':
-            ineligible_df['ASSIGNED_PAS_CLEARTEXT'] = ineligible_df['ASSIGNED_PAS_CLEARTEXT'].str[:25]
+            ineligible_df['ASSIGNED_PAS_CLEARTEXT'] = ineligible_df['ASSIGNED_PAS_CLEARTEXT'].str[:MAX_UNIT_LENGTH]
         if column == 'FULL_NAME':
-            ineligible_df['FULL_NAME'] = ineligible_df['FULL_NAME'].str[:25]
+            ineligible_df['FULL_NAME'] = ineligible_df['FULL_NAME'].str[:MAX_UNIT_LENGTH]
         if pd.api.types.is_datetime64_any_dtype(ineligible_df[column].dtype):
             ineligible_df[column] = ineligible_df[column].dt.strftime('%d-%b-%Y').str.upper()
 
     btz_df = pdf_roster.loc[eligible_btz_service_members]
 
-
     for column in btz_df.columns:
         if column == 'ASSIGNED_PAS_CLEARTEXT':
-            btz_df['ASSIGNED_PAS_CLEARTEXT'] = btz_df['ASSIGNED_PAS_CLEARTEXT'].str[:25]
+            btz_df['ASSIGNED_PAS_CLEARTEXT'] = btz_df['ASSIGNED_PAS_CLEARTEXT'].str[:MAX_UNIT_LENGTH]
         if column == 'FULL_NAME':
-            btz_df['FULL_NAME'] = btz_df['FULL_NAME'].str[:25]
+            btz_df['FULL_NAME'] = btz_df['FULL_NAME'].str[:MAX_UNIT_LENGTH]
         if pd.api.types.is_datetime64_any_dtype(btz_df[column].dtype):
             btz_df[column] = btz_df[column].dt.strftime('%d-%b-%Y').str.upper()
 
     for pascode in unit_total_map:
-        if unit_total_map[pascode] < 10:
+        if unit_total_map[pascode] < SMALL_UNIT_THRESHOLD:
             small_unit_pascodes.append(pascode)
 
     for index, row in eligible_df.iterrows():
@@ -126,16 +108,16 @@ def roster_processor(roster_df, session_id, cycle, year):
 
     if eligible_df is not None:
         update_session(session_id, eligible_df=eligible_df)
-    
+
     if ineligible_df is not None:
         update_session(session_id, ineligible_df=ineligible_df)
 
-    if btz_df is not None: 
+    if btz_df is not None:
         update_session(session_id, btz_df=btz_df)
 
     if small_unit_df is not None:
         update_session(session_id, small_unit_df=small_unit_df)
-    
+
     if pascodeUnitMap is not None:
         update_session(session_id, pascode_unit_map=pascodeUnitMap)
 

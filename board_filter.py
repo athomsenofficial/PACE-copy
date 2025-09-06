@@ -1,129 +1,12 @@
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
+from constants import (
+    SCODS, TIG, TIG_MONTHS_REQUIRED, TAFMSD, MDOS,
+    MAIN_HIGHER_TENURE, EXCEPTION_HIGHER_TENURE, PAFSC_MAP,
+    RE_CODES, EXCEPTION_HYT_START_DATE, EXCEPTION_HYT_END_DATE
+)
 
-
-# Static closeout date = annual report due date (PECD)
-SCODs = {
-    'AB': '31-MAR',    # E1 to E2
-    'AMN': '31-MAR',   # E2 to E3
-    'A1C': '31-MAR',   # E3 to E4
-    'SRA': '31-MAR',   # E4 to E5 (BTZ/regular)
-    'SSG': '31-JAN',   # E5 to E6
-    'TSG': '30-NOV',   # E6 to E7
-    'MSG': '30-SEP',   # E7 to E8
-    'SMS': '31-JUL'    # E8 to E9
-}
-
-# Base month for TIG calculation (DOR requirement date)
-TIG = {
-    'AB': '01-FEB',    # Chart shows 1 FEB for E1-E2
-    'AMN': '01-FEB',   # Chart shows 1 FEB for E2-E3
-    'A1C': '01-FEB',   # Chart shows 1 FEB for E3-E4
-    'SRA': '01-FEB',   # Chart shows 1 FEB for E4-E5
-    'SSG': '01-AUG',   # Chart shows 1 AUG for E5-E6
-    'TSG': '01-JUL',   # Chart shows 1 JUL for E6-E7
-    'MSG': '01-JUL',   # Chart shows 1 JUL for E7-E8
-    'SMS': '01-MAR'    # Chart shows 1 MAR for E8-E9
-}
-
-# Time in grade months required
-tig_months_required = {
-    'AB': 6,     # 21/6 months per chart
-    'AMN': 6,    # 22/6 months per chart
-    'A1C': 10,   # 23/6 months per chart (Note: Regular is 28 months, BTZ is different)
-    'SRA': 6,    # 24/6 months per chart
-    'SSG': 23,   # 23/23 months per chart
-    'TSG': 23,   # 24/23 months per chart (varies by cycle, using most common)
-    'MSG': 20,   # 20/20 months per chart
-    'SMS': 21    # 21/21 months per chart
-}
-
-# Total active federal military service date = time in military (years)
-# Based on TAFMSD/TIS REQUIRED column
-TAFMSD = {
-    'AB': 0.25,   # 3 months (1 AUG - 3 months = 1 MAY)
-    'AMN': 0.5,   # 6 months (1 AUG - 6 months = 1 FEB)
-    'A1C': 1.25,  # 15 months (1 AUG - 15 months)
-    'SRA': 3,     # 3 years per chart
-    'SSG': 5,     # 5 years per chart (1 JUL XX/5 YRS)
-    'TSG': 8,     # 8 years per chart (1 JUL XX/8 YRS)
-    'MSG': 11,    # 11 years per chart (1 MAR XX/11 YRS)
-    'SMS': 14     # 14 years per chart (1 DEC XX/14 YRS)
-}
-
-# Mandatory date of separation (MDOS column - must be on or after)
-# This is the base month for MDOS calculation
-mdos = {
-    'AB': '01-SEP',    # Per chart MDOS column
-    'AMN': '01-SEP',   # Per chart MDOS column
-    'A1C': '01-SEP',   # Per chart MDOS column
-    'SRA': '01-SEP',   # Per chart MDOS column
-    'SSG': '01-AUG',   # Per chart MDOS column
-    'TSG': '01-AUG',   # Per chart MDOS column
-    'MSG': '01-APR',   # Per chart MDOS column
-    'SMS': '01-JAN'    # Per chart MDOS column
-}
-
-# Main higher tenure (standard HYT limits, in years)
-main_higher_tenure = {
-    'AB': 6,
-    'AMN': 6,
-    'A1C': 8,
-    'SRA': 10,
-    'SSG': 20,
-    'TSG': 22,
-    'MSG': 24,
-    'SMS': 26
-}
-
-# Exception higher tenure (extended HYT limits, in years)
-exception_higher_tenure = {
-    'AB': 8,
-    'AMN': 8,
-    'A1C': 10,
-    'SRA': 12,
-    'SSG': 22,
-    'TSG': 24,
-    'MSG': 26,
-    'SMS': 28
-}
-
-# pafsc skill level mapping 5th digit of the AFSC: ex -3F0X1)
-pafsc_map = {
-    'AB': '3',
-    'AMN': '3',
-    'A1C': '3',
-    'SRA': '5',
-    'SSG': '7',
-    'TSG': '7',
-    'MSG': '7',
-    'SMS': '9'
-}
-
-#reenlistment codes
-re_codes = {
-    "2A": "AFPC Denied Reenlistment",
-    "2B": "Discharged, General.",
-    "2C": "Involuntary separation.",
-    "2F": "Undergoing Rehab",
-    "2G": "Substance Abuse, Drugs",
-    "2H": "Substance Abuse, Alcohol",
-    "2J": "Under investigation",
-    "2K": "Involuntary Separation.",
-    "2M": "Sentenced under UCMJ",
-    "2P": "AWOL; deserter.",
-    "2W": "Retired and recalled to AD",
-    "2X": "Not selected for Reenlistment.",
-    "4H": "Article 15.",
-    "4I": "Control Roster.",
-    "4L": "Separated, Commissioning program.",
-    "4M": "Breach of enlistment.",
-    "4N": "Convicted, Civil Court."
-}
-
-exception_hyt_start_date = datetime(2023, 12, 8)
-exception_hyt_end_date = datetime(2026, 9,30)
 
 def _parse_date(value):
     """Return ``datetime`` for a variety of Excel or string representations."""
@@ -145,7 +28,7 @@ def pafsc_check(grade, pafsc, two_afsc, three_afsc, four_afsc):
     if pafsc and pafsc[0] in ('8', '9'):
         return None
 
-    required_level = pafsc_map.get(grade)
+    required_level = PAFSC_MAP.get(grade)
     if not required_level:
         return False
 
@@ -153,43 +36,40 @@ def pafsc_check(grade, pafsc, two_afsc, three_afsc, four_afsc):
 
     for afsc in afscs:
         if isinstance(afsc, str) and len(afsc) >= 5:
-            # Determine the index for the skill level character
-            # Index 4 for AFSCs with a letter or '-' at the beginning
-            # Index 3 for AFSCs with a number at the beginning
             skill_level_index = 4 if afsc[0].isalpha() or afsc[0] == '-' else 3
 
             try:
                 if afsc[skill_level_index] >= required_level:
                     return True
             except IndexError:
-                # Handle cases where the string might be too short for the determined index
                 continue
 
     return False
-
 
 
 def btz_elgibility_check(date_of_rank, year):
     date_of_rank = _parse_date(date_of_rank)
     cutoff_date = datetime.strptime(f"01-Feb-{year}", "%d-%b-%Y")
     btz_date_of_rank = date_of_rank + relativedelta(months=22)
-    scod_date = datetime.strptime(f"{SCODs.get('SRA')}-{year}", "%d-%b-%Y")
+    scod_date = datetime.strptime(f"{SCODS.get('SRA')}-{year}", "%d-%b-%Y")
     if btz_date_of_rank <= cutoff_date:
         return True
     if cutoff_date < btz_date_of_rank <= scod_date:
         return True
     return False
 
+
 def check_a1c_eligbility(date_of_rank, year):
     date_of_rank = _parse_date(date_of_rank)
     cutoff_date = datetime.strptime(f"01-Feb-{year}", "%d-%b-%Y")
-    scod_date = datetime.strptime(f"{SCODs.get('SRA')}-{year}", "%d-%b-%Y")
+    scod_date = datetime.strptime(f"{SCODS.get('SRA')}-{year}", "%d-%b-%Y")
     standard_a1c_date_of_rank = date_of_rank + relativedelta(months=28)
     if standard_a1c_date_of_rank <= cutoff_date:
         return True
     if cutoff_date < standard_a1c_date_of_rank <= scod_date:
         return False
     return None
+
 
 def three_year_tafmsd_check(scod_as_datetime, tafmsd):
     tafmsd = _parse_date(tafmsd)
@@ -199,19 +79,20 @@ def three_year_tafmsd_check(scod_as_datetime, tafmsd):
     return adjusted_tafmsd > scod_as_datetime
 
 
-def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafmsd, re_status, pafsc, two_afsc, three_afsc, four_afsc):
+def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafmsd, re_status, pafsc, two_afsc,
+                 three_afsc, four_afsc):
     try:
         date_of_rank = _parse_date(date_of_rank)
         uif_disposition_date = _parse_date(uif_disposition_date)
         tafmsd = _parse_date(tafmsd)
 
-        scod = f'{SCODs.get(grade)}-{year}'
+        scod = f'{SCODS.get(grade)}-{year}'
         scod_as_datetime = datetime.strptime(scod, "%d-%b-%Y")
-        tig_selection_month = f'{TIG.get(grade)}-{year}'
+        tig_selection_month = f'{TIG.get(grade)}-{year + 1}'
         formatted_tig_selection_month = datetime.strptime(tig_selection_month, "%d-%b-%Y")
-        tig_eligibility_month = formatted_tig_selection_month - relativedelta(months=tig_months_required.get(grade))
+        tig_eligibility_month = formatted_tig_selection_month - relativedelta(months=TIG_MONTHS_REQUIRED.get(grade))
         tafmsd_required_date = formatted_tig_selection_month - relativedelta(years=TAFMSD.get(grade))
-        hyt_date = tafmsd + relativedelta(years=main_higher_tenure.get(grade))
+        hyt_date = tafmsd + relativedelta(years=MAIN_HIGHER_TENURE.get(grade))
         mdos = formatted_tig_selection_month + relativedelta(months=1)
         btz_check = None
 
@@ -227,11 +108,12 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
             if three_year_tafmsd_check(scod_as_datetime, tafmsd):
                 return False, 'Over 36 months TIS.'
         if date_of_rank is None or date_of_rank > tig_eligibility_month:
-            return False, f'TIG: < {tig_months_required.get(grade)} months'
+            return False, f'TIG: < {TIG_MONTHS_REQUIRED.get(grade)} months'
         if tafmsd > tafmsd_required_date:
             return False, f'TIS < {TAFMSD.get(grade)} years'
-        if exception_hyt_start_date < hyt_date < exception_hyt_end_date:
-            hyt_date += relativedelta(years=2)
+        if EXCEPTION_HYT_START_DATE < hyt_date < EXCEPTION_HYT_END_DATE:
+            exception_hyt_years = EXCEPTION_HIGHER_TENURE.get(grade, MAIN_HIGHER_TENURE.get(grade))
+            hyt_date = tafmsd + relativedelta(years=exception_hyt_years)
         if hyt_date < mdos:
             return False, 'Higher tenure.'
         try:
@@ -240,8 +122,8 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
             uif_code = 0
         if uif_code > 1 and uif_disposition_date and uif_disposition_date < scod_as_datetime:
             return False, f'UIF code: {uif_code}'
-        if re_status in re_codes.keys():
-            return False, f'{re_status}: {re_codes.get(re_status)}'
+        if re_status in RE_CODES.keys():
+            return False, f'{re_status}: {RE_CODES.get(re_status)}'
         if grade not in ('SMS', 'MSG'):
             if pafsc_check(grade, pafsc, two_afsc, three_afsc, four_afsc) is False:
                 return False, 'Insufficient PAFSC skill level.'
