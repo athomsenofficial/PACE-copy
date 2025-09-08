@@ -6,7 +6,8 @@ import redis
 import pandas as pd
 from dotenv import load_dotenv
 import base64
-from constants import SESSION_TTL_SECONDS
+from constants import session_ttl
+from datetime import datetime
 
 load_dotenv()
 
@@ -17,23 +18,38 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 def create_session(processed_df: pd.DataFrame, pdf_df: pd.DataFrame):
     session_id = str(uuid.uuid4())
 
-    def sanitize_records(records):
+    def convert_datetime_columns(df):
+        """Convert all datetime columns to strings before creating records"""
+        df_copy = df.copy()
+        for col in df_copy.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%d').fillna('')
+            else:
+                # Check for datetime objects in object columns
+                if df_copy[col].dtype == 'object':
+                    df_copy[col] = df_copy[col].apply(
+                        lambda x: x.isoformat() if isinstance(x, (datetime, pd.Timestamp)) else x
+                    )
+        return df_copy
+
+    # Convert datetime columns first
+    processed_clean = convert_datetime_columns(processed_df)
+    pdf_clean = convert_datetime_columns(pdf_df)
+
+    def simple_sanitize(records):
         for record in records:
             for key, value in record.items():
                 if pd.isna(value):
                     record[key] = None
-                elif isinstance(value, pd.Timestamp):
-                    record[key] = value.isoformat()
         return records
 
     session_data = {
-        "dataframe": sanitize_records(processed_df.to_dict(orient="records")),
-        "pdf_dataframe": sanitize_records(pdf_df.to_dict(orient="records")),
+        "dataframe": simple_sanitize(processed_clean.to_dict(orient="records")),
+        "pdf_dataframe": simple_sanitize(pdf_clean.to_dict(orient="records")),
     }
 
-    r.set(session_id, json.dumps(session_data), ex=SESSION_TTL_SECONDS)
+    r.set(session_id, json.dumps(session_data), ex=session_ttl)
     return session_id
-
 
 def get_session(session_id):
     raw = r.get(session_id)
@@ -49,13 +65,33 @@ def update_session(session_id, **kwargs):
 
     session = json.loads(session)
 
+    def comprehensive_sanitize(obj):
+        """Recursively sanitize any datetime objects in nested structures"""
+        if isinstance(obj, dict):
+            return {k: comprehensive_sanitize(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [comprehensive_sanitize(item) for item in obj]
+        elif pd.isna(obj):
+            return None
+        elif isinstance(obj, (pd.Timestamp, datetime)):
+            return obj.isoformat()
+        elif hasattr(obj, 'isoformat'):  # Catch any other datetime-like objects
+            try:
+                return obj.isoformat()
+            except:
+                return str(obj)
+        else:
+            return obj
+
     for key, value in kwargs.items():
         if isinstance(value, pd.DataFrame):
-            session[key] = value.to_dict(orient="records")
+            # Convert DataFrame to records and sanitize
+            records = value.to_dict(orient="records")
+            session[key] = comprehensive_sanitize(records)
         else:
-            session[key] = value
+            session[key] = comprehensive_sanitize(value)
 
-    r.set(session_id, json.dumps(session), ex=SESSION_TTL_SECONDS)
+    r.set(session_id, json.dumps(session), ex=session_ttl)
     return session
 
 
@@ -65,7 +101,7 @@ def delete_session(session_id):
 
 def store_pdf_in_redis(session_id: str, pdf_buffer: BytesIO):
     encoded = base64.b64encode(pdf_buffer.getvalue()).decode("utf-8")
-    r.set(f"{session_id}_pdf", encoded, ex=SESSION_TTL_SECONDS)
+    r.set(f"{session_id}_pdf", encoded, ex=session_ttl)
 
 
 def get_pdf_from_redis(session_id: str) -> BytesIO | None:

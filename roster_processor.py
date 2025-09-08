@@ -1,11 +1,35 @@
+# In roster_processor.py
+
 import pandas as pd
 from accounting_date_check import accounting_date_check
 from board_filter import board_filter
 from session_manager import update_session, get_session
 from constants import (
-    REQUIRED_COLUMNS, OPTIONAL_COLUMNS, PDF_COLUMNS, BOARDS,
-    GRADE_MAP, PROMOTIONAL_MAP, SMALL_UNIT_THRESHOLD, MAX_NAME_LENGTH, MAX_UNIT_LENGTH
+    REQUIRED_COLUMNS, OPTIONAL_COLUMNS, PDF_COLUMNS,
+    GRADE_MAP, PROMOTIONAL_MAP, small_unit_threshold, max_unit_length,
+    OFFICER_RANKS, ENLISTED_RANKS
 )
+
+
+from datetime import datetime
+from date_parsing import parse_date
+
+
+def format_date_for_display(date_value):
+    """Format date for display in PDFs as DD-MMM-YYYY"""
+    if pd.isna(date_value) or date_value is None:
+        return None
+
+    if isinstance(date_value, str):
+        parsed_date = parse_date(date_value)
+        if parsed_date:
+            return parsed_date.strftime("%d-%b-%Y").upper()
+        return date_value
+
+    if isinstance(date_value, (datetime, pd.Timestamp)):
+        return date_value.strftime("%d-%b-%Y").upper()
+
+    return str(date_value)
 
 
 def roster_processor(roster_df, session_id, cycle, year):
@@ -22,106 +46,158 @@ def roster_processor(roster_df, session_id, cycle, year):
 
     error_log = []
 
-    filtered_roster_df = roster_df[REQUIRED_COLUMNS + OPTIONAL_COLUMNS]
-    pdf_roster = filtered_roster_df[PDF_COLUMNS]
+    all_roster_columns = REQUIRED_COLUMNS + OPTIONAL_COLUMNS
 
+    missing_columns = [col for col in all_roster_columns if col not in roster_df.columns]
+    if missing_columns:
+        error_log.append(f"Missing required columns: {', '.join(missing_columns)}")
+        update_session(session_id, error_log=error_log)
+        return
+
+    filtered_roster_df = roster_df[all_roster_columns].copy()
+
+    # Parse all date columns in the DataFrame ONCE, before processing
+    date_columns = ['DOR', 'UIF_DISPOSITION_DATE', 'TAFMSD', 'DATE_ARRIVED_STATION']
+    for col in date_columns:
+        if col in filtered_roster_df.columns:
+            filtered_roster_df[col] = filtered_roster_df[col].apply(
+                lambda x: parse_date(x, error_log, None)
+            )
+
+    # Processing loop - now working with properly parsed datetime objects
     for index, row in filtered_roster_df.iterrows():
-        for column, value in row.items():
-            if pd.isna(value) and column in REQUIRED_COLUMNS:
-                error_log.append(rf"error at {index}, {column}")
-                break
-            if isinstance(value, pd.Timestamp):
-                row[column] = value.strftime('%d-%b-%Y').upper()
-                continue
-        valid_member = accounting_date_check(row['DATE_ARRIVED_STATION'], cycle, year)
-        if not valid_member:
+
+        # Check for officer ranks
+        if row['GRADE'] in OFFICER_RANKS:
+            error_log.append(f"Officer {row['FULL_NAME']} ({row['GRADE']}) excluded from enlisted promotion processing")
             continue
+
+        if row['GRADE'] not in ENLISTED_RANKS:
+            error_log.append(f"Unknown or unsupported rank: {row['GRADE']} for {row['FULL_NAME']}")
+            continue
+
+        # Early filtering - only process personnel eligible for this promotion cycle
+        if not (row['GRADE'] == cycle or (row['GRADE'] == 'A1C' and cycle == 'SRA')):
+            continue
+
+        # Check for missing required data
+        missing_required = False
+        for column in REQUIRED_COLUMNS:
+            if column in row and pd.isna(row[column]):
+                error_log.append(f"Missing required data at row {index}, column {column}")
+                missing_required = True
+                break
+
+        if missing_required:
+            ineligible_service_members.append(index)
+            reason_for_ineligible_map[index] = 'Missing required data'
+            continue
+
+        # Test accounting date check (dates are already parsed)
+        valid_member = accounting_date_check(row['DATE_ARRIVED_STATION'], cycle, year)
+
+        if not valid_member:
+            if row['DATE_ARRIVED_STATION'] is None:
+                error_log.append(
+                    f"Accounting date check failed for {row['FULL_NAME']} ({row['GRADE']}) - unparseable DATE_ARRIVED_STATION")
+            else:
+                error_log.append(
+                    f"Accounting date check failed for {row['FULL_NAME']} ({row['GRADE']}) - DAS: {row['DATE_ARRIVED_STATION']}, Cycle: {cycle}, Year: {year}")
+
+            ineligible_service_members.append(index)
+            reason_for_ineligible_map[index] = 'Failed accounting date check.'
+            continue
+
+        # Track PASCODEs
         if row['ASSIGNED_PAS'] not in pascodes:
             pascodes.append(row['ASSIGNED_PAS'])
             pascodeUnitMap[row['ASSIGNED_PAS']] = row['ASSIGNED_PAS_CLEARTEXT']
+
+        # Check projected grades
         if row['GRADE_PERM_PROJ'] == cycle:
             ineligible_service_members.append(index)
             reason_for_ineligible_map[index] = f'Projected for {cycle}.'
             continue
         elif row['GRADE_PERM_PROJ'] == PROMOTIONAL_MAP.get(cycle):
             continue
-        if row['GRADE'] == cycle or (row['GRADE'] == 'A1C' and cycle == 'SRA'):
-            member_status = board_filter(row['GRADE'], year, row['DOR'], row['UIF_CODE'],
-                                         row['UIF_DISPOSITION_DATE'], row['TAFMSD'], row['REENL_ELIG_STATUS'],
-                                         row['PAFSC'], row['2AFSC'], row['3AFSC'], row['4AFSC'])
-            if member_status is None:
-                continue
-            elif member_status == True:
-                eligible_service_members.append(index)
-                if row['ASSIGNED_PAS'] in unit_total_map:
-                    unit_total_map[row['ASSIGNED_PAS']] = unit_total_map[row['ASSIGNED_PAS']] + 1
-                else:
-                    unit_total_map[row['ASSIGNED_PAS']] = 1
-            elif member_status[0] == True and member_status[1] == 'btz':
-                eligible_btz_service_members.append(index)
-            elif member_status[0] == False:
-                ineligible_service_members.append(index)
-                reason_for_ineligible_map[index] = member_status[1]
+
+        # Board filter check
+        member_status = board_filter(row['GRADE'], year, row['DOR'], row['UIF_CODE'],
+                                     row['UIF_DISPOSITION_DATE'], row['TAFMSD'], row['REENL_ELIG_STATUS'],
+                                     row['PAFSC'], row['2AFSC'], row['3AFSC'], row['4AFSC'])
+
+        if member_status is None:
+            continue
+        elif member_status is True:
+            eligible_service_members.append(index)
+            if row['ASSIGNED_PAS'] in unit_total_map:
+                unit_total_map[row['ASSIGNED_PAS']] += 1
+            else:
+                unit_total_map[row['ASSIGNED_PAS']] = 1
+        elif member_status[0] is True and member_status[1] == 'btz':
+            eligible_btz_service_members.append(index)
+        elif member_status[0] is False:
+            ineligible_service_members.append(index)
+            reason_for_ineligible_map[index] = member_status[1]
 
     pascodes = sorted(pascodes)
-
     update_session(session_id, pascodes=pascodes)
 
-    eligible_df = pdf_roster.loc[eligible_service_members]
-    for column in eligible_df.columns:
-        if column == 'ASSIGNED_PAS_CLEARTEXT':
-            eligible_df['ASSIGNED_PAS_CLEARTEXT'] = eligible_df['ASSIGNED_PAS_CLEARTEXT'].str[:MAX_UNIT_LENGTH]
-        if column == 'FULL_NAME':
-            eligible_df['FULL_NAME'] = eligible_df['FULL_NAME'].str[:MAX_UNIT_LENGTH]
-        if pd.api.types.is_datetime64_any_dtype(eligible_df[column].dtype):
-            eligible_df[column] = eligible_df[column].dt.strftime('%d-%b-%Y').str.upper()
+    # Create PDF DataFrames with parsed datetime objects
+    pdf_roster = filtered_roster_df[PDF_COLUMNS].copy()
 
-    ineligible_df = pdf_roster.loc[ineligible_service_members].copy()
-    ineligible_df['REASON'] = ineligible_df.index.map(reason_for_ineligible_map)
-    for column in ineligible_df.columns:
-        if column == 'ASSIGNED_PAS_CLEARTEXT':
-            ineligible_df['ASSIGNED_PAS_CLEARTEXT'] = ineligible_df['ASSIGNED_PAS_CLEARTEXT'].str[:MAX_UNIT_LENGTH]
-        if column == 'FULL_NAME':
-            ineligible_df['FULL_NAME'] = ineligible_df['FULL_NAME'].str[:MAX_UNIT_LENGTH]
-        if pd.api.types.is_datetime64_any_dtype(ineligible_df[column].dtype):
-            ineligible_df[column] = ineligible_df[column].dt.strftime('%d-%b-%Y').str.upper()
+    eligible_df = pdf_roster.loc[eligible_service_members].copy() if eligible_service_members else pd.DataFrame()
+    ineligible_df = pdf_roster.loc[ineligible_service_members].copy() if ineligible_service_members else pd.DataFrame()
+    btz_df = pdf_roster.loc[eligible_btz_service_members].copy() if eligible_btz_service_members else pd.DataFrame()
 
-    btz_df = pdf_roster.loc[eligible_btz_service_members]
+    if not ineligible_df.empty:
+        ineligible_df['REASON'] = ineligible_df.index.map(reason_for_ineligible_map)
 
-    for column in btz_df.columns:
-        if column == 'ASSIGNED_PAS_CLEARTEXT':
-            btz_df['ASSIGNED_PAS_CLEARTEXT'] = btz_df['ASSIGNED_PAS_CLEARTEXT'].str[:MAX_UNIT_LENGTH]
-        if column == 'FULL_NAME':
-            btz_df['FULL_NAME'] = btz_df['FULL_NAME'].str[:MAX_UNIT_LENGTH]
-        if pd.api.types.is_datetime64_any_dtype(btz_df[column].dtype):
-            btz_df[column] = btz_df[column].dt.strftime('%d-%b-%Y').str.upper()
+    # NOW format dates for display - only when preparing final output
+    def format_df_for_session(df):
+        if df.empty:
+            return df
+        df_copy = df.copy()
 
+        # Format date columns for display ONLY
+        date_columns = ['DOR', 'TAFMSD', 'DATE_ARRIVED_STATION']
+        for col in date_columns:
+            if col in df_copy.columns:
+                df_copy[col] = df_copy[col].apply(format_date_for_display)
+
+        # Format text columns
+        if 'ASSIGNED_PAS_CLEARTEXT' in df_copy.columns:
+            df_copy['ASSIGNED_PAS_CLEARTEXT'] = df_copy['ASSIGNED_PAS_CLEARTEXT'].str[:max_unit_length]
+        if 'FULL_NAME' in df_copy.columns:
+            df_copy['FULL_NAME'] = df_copy['FULL_NAME'].str[:max_unit_length]
+        return df_copy
+
+    # Apply formatting only for final output
+    eligible_df = format_df_for_session(eligible_df)
+    ineligible_df = format_df_for_session(ineligible_df)
+    btz_df = format_df_for_session(btz_df)
+
+    # Handle small units
     for pascode in unit_total_map:
-        if unit_total_map[pascode] < SMALL_UNIT_THRESHOLD:
+        if unit_total_map[pascode] < small_unit_threshold:
             small_unit_pascodes.append(pascode)
 
-    for index, row in eligible_df.iterrows():
-        if row['ASSIGNED_PAS'] in small_unit_pascodes:
-            small_unit_eligible_service_members.append(index)
+    if not eligible_df.empty:
+        small_unit_eligible_service_members = eligible_df[eligible_df['ASSIGNED_PAS'].isin(small_unit_pascodes)].index
+        small_unit_df = eligible_df.loc[small_unit_eligible_service_members].copy()
+    else:
+        small_unit_df = pd.DataFrame()
 
-    small_unit_df = eligible_df.loc[small_unit_eligible_service_members]
+    # Update session with results
+    update_session(session_id, eligible_df=eligible_df)
+    update_session(session_id, ineligible_df=ineligible_df)
+    update_session(session_id, btz_df=btz_df)
+    update_session(session_id, small_unit_df=small_unit_df)
 
-    if eligible_df is not None:
-        update_session(session_id, eligible_df=eligible_df)
-
-    if ineligible_df is not None:
-        update_session(session_id, ineligible_df=ineligible_df)
-
-    if btz_df is not None:
-        update_session(session_id, btz_df=btz_df)
-
-    if small_unit_df is not None:
-        update_session(session_id, small_unit_df=small_unit_df)
-
-    if pascodeUnitMap is not None:
+    if pascodeUnitMap:
         update_session(session_id, pascode_unit_map=pascodeUnitMap)
 
-    if error_log.count != 0:
+    if error_log:
         update_session(session_id, error_log=error_log)
 
     return

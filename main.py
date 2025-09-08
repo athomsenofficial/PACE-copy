@@ -12,15 +12,15 @@ from roster_processor import roster_processor
 from classes import PasCodeInfo, PasCodeSubmission
 from constants import (
     REQUIRED_COLUMNS, OPTIONAL_COLUMNS, PDF_COLUMNS,
-    CORS_ORIGINS, ALLOWED_FILE_TYPES, IMAGE_BASE_DIR, DEFAULT_LOGO_PATH
+    cors_origins, allowed_types, images_dir, default_logo
 )
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,  # Explicit origin required if using credentials
-    allow_credentials=True,  # Required if sending cookies or auth headers
+    allow_origins=cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,7 +34,7 @@ async def upload_file(
 ):
     return_object = {}
 
-    if file.content_type not in ALLOWED_FILE_TYPES:
+    if file.content_type not in allowed_types:
         return JSONResponse(content={"error": "Invalid file type. Only CSV or Excel files are allowed."},
                             status_code=400)
 
@@ -56,20 +56,21 @@ async def upload_file(
 
     session = get_session(session_id)
 
-    if session['pascodes'] is not None:
+    # Use .get() to safely access session keys that might not exist
+    if session.get('pascodes') is not None:
         return_object['pascodes'] = session['pascodes']
 
-    if session['pascode_unit_map'] is not None:
+    if session.get('pascode_unit_map') is not None:
         return_object['pascode_unit_map'] = session['pascode_unit_map']
 
-    if session['small_unit_df'] is not None:
+    if session.get('small_unit_df') is not None:
         return_object['senior_rater_needed'] = True
     else:
         return_object["senior_rater_needed"] = False
 
     return_object['message'] = "Upload successful."
     return_object['session_id'] = session_id
-    return_object['errors'] = session['error_log']
+    return_object['errors'] = session.get('error_log', [])
 
     return JSONResponse(content=return_object)
 
@@ -123,7 +124,7 @@ async def submit_pascode_info(payload: PasCodeSubmission):
     update_session(payload.session_id, srid_pascode_map=srid_pascode_map)
 
     # Use constants for logo path
-    logo_path = os.path.join(IMAGE_BASE_DIR, DEFAULT_LOGO_PATH)
+    logo_path = os.path.join(images_dir, default_logo)
 
     response = generate_roster_pdf(payload.session_id,
                                    output_filename=rf"tmp/{payload.session_id}_initial_mel_roster.pdf",
@@ -142,7 +143,7 @@ async def upload_final_mel_file(
 ):
     return_object = {}
 
-    if file.content_type not in ALLOWED_FILE_TYPES:
+    if file.content_type not in allowed_types:
         return JSONResponse(content={"error": "Invalid file type. Only CSV or Excel files are allowed."},
                             status_code=400)
 
@@ -164,20 +165,21 @@ async def upload_final_mel_file(
 
     session = get_session(session_id)
 
-    if session['pascodes'] is not None:
+    # Use .get() to safely access session keys that might not exist
+    if session.get('pascodes') is not None:
         return_object['pascodes'] = session['pascodes']
 
-    if session['pascode_unit_map'] is not None:
+    if session.get('pascode_unit_map') is not None:
         return_object['pascode_unit_map'] = session['pascode_unit_map']
 
-    if session['small_unit_df'] is not None:
+    if session.get('small_unit_df') is not None:
         return_object['senior_rater_needed'] = True
     else:
         return_object["senior_rater_needed"] = False
 
     return_object['message'] = "Upload successful."
     return_object['session_id'] = session_id
-    return_object['errors'] = session['error_log']
+    return_object['errors'] = session.get('error_log', [])
 
     return JSONResponse(content=return_object)
 
@@ -206,7 +208,7 @@ async def submit_final_pascode_info(payload: PasCodeSubmission):
     update_session(payload.session_id, srid_pascode_map=srid_pascode_map)
 
     # Use constants for logo path
-    logo_path = os.path.join(IMAGE_BASE_DIR, DEFAULT_LOGO_PATH)
+    logo_path = os.path.join(images_dir, default_logo)
 
     response = generate_final_roster_pdf(payload.session_id,
                                          output_filename=rf"tmp/{payload.session_id}_final_mel_roster.pdf",
