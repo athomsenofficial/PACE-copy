@@ -10,10 +10,8 @@ from constants import (
     OFFICER_RANKS, ENLISTED_RANKS
 )
 
-
 from datetime import datetime
 from date_parsing import parse_date
-
 
 def format_date_for_display(date_value):
     """Format date for display in PDFs as DD-MMM-YYYY"""
@@ -30,7 +28,6 @@ def format_date_for_display(date_value):
         return date_value.strftime("%d-%b-%Y").upper()
 
     return str(date_value)
-
 
 def roster_processor(roster_df, session_id, cycle, year):
     eligible_service_members = []
@@ -93,19 +90,8 @@ def roster_processor(roster_df, session_id, cycle, year):
             reason_for_ineligible_map[index] = 'Missing required data'
             continue
 
-        # Test accounting date check (dates are already parsed)
         valid_member = accounting_date_check(row['DATE_ARRIVED_STATION'], cycle, year)
-
         if not valid_member:
-            if row['DATE_ARRIVED_STATION'] is None:
-                error_log.append(
-                    f"Accounting date check failed for {row['FULL_NAME']} ({row['GRADE']}) - unparseable DATE_ARRIVED_STATION")
-            else:
-                error_log.append(
-                    f"Accounting date check failed for {row['FULL_NAME']} ({row['GRADE']}) - DAS: {row['DATE_ARRIVED_STATION']}, Cycle: {cycle}, Year: {year}")
-
-            ineligible_service_members.append(index)
-            reason_for_ineligible_map[index] = 'Failed accounting date check.'
             continue
 
         # Track PASCODEs
