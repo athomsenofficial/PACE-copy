@@ -177,9 +177,10 @@ def roster_processor(roster_df, session_id, cycle, year):
     ineligible_df = format_df_for_session(ineligible_df)
     btz_df = format_df_for_session(btz_df)
 
-    # Handle small units
     for pascode in unit_total_map:
-        if unit_total_map[pascode] < small_unit_threshold:
+        if cycle == 'MSG' or cycle == 'SMS':
+            small_unit_pascodes.append(pascode)
+        elif unit_total_map[pascode] <= small_unit_threshold:
             small_unit_pascodes.append(pascode)
 
     if not eligible_df.empty:
