@@ -255,6 +255,9 @@ ENLISTED_RANKS = ['AB', 'AMN', 'A1C', 'SRA', 'SSG', 'TSG', 'MSG', 'SMS', 'CMS']
 # ============================================================================
 
 SCODS = {
+    'AB': '31-MAR',
+    'AMN': '31-MAR',
+    'A1C': '31-MAR',
     'SRA': '31-MAR',
     'SSG': '31-JAN',
     'TSG': '30-NOV',
@@ -297,14 +300,14 @@ TIG_MONTHS_REQUIRED = {
 # Total active federal military service date = time in military (years)
 # Based on TAFMSD/TIS REQUIRED column
 TAFMSD = {
-    'AB': 0.25,   # 3 months (1 AUG - 3 months = 1 MAY)
-    'AMN': 0.5,   # 6 months (1 AUG - 6 months = 1 FEB)
-    'A1C': 1.25,  # 15 months (1 AUG - 15 months)
-    'SRA': 3,     # 3 years per chart
-    'SSG': 5,     # 5 years per chart (1 JUL XX/5 YRS)
-    'TSG': 8,     # 8 years per chart (1 JUL XX/8 YRS)
-    'MSG': 11,    # 11 years per chart (1 MAR XX/11 YRS)
-    'SMS': 14     # 14 years per chart (1 DEC XX/14 YRS)
+    'AB': 0.25,  # 3 months
+    'AMN': 0.5,  # 6 months
+    'A1C': 1.25,  # 15 months
+    'SRA': 3,  # 3 years
+    'SSG': 5,  # 5 years
+    'TSG': 8,  # 8 years
+    'MSG': 11,  # 11 years
+    'SMS': 14  # 14 years
 }
 
 # ============================================================================
