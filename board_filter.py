@@ -65,7 +65,8 @@ def three_year_tafmsd_check(scod_as_datetime, tafmsd):
     if tafmsd is None:
         return False
     adjusted_tafmsd = tafmsd + relativedelta(months=36)
-    return adjusted_tafmsd > scod_as_datetime
+    # Return True if they WILL have more than 36 months TIS by SCOD (ineligible)
+    return adjusted_tafmsd <= scod_as_datetime
 
 
 def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafmsd, re_status, pafsc, two_afsc,
@@ -85,8 +86,23 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
         tig_selection_month = f'{TIG.get(grade)}-{year + 1}'
         formatted_tig_selection_month = datetime.strptime(tig_selection_month, "%d-%b-%Y")
         tig_eligibility_month = formatted_tig_selection_month - relativedelta(months=TIG_MONTHS_REQUIRED.get(grade))
-        tafmsd_required_date = formatted_tig_selection_month - relativedelta(years=TAFMSD.get(grade))
-        hyt_date = tafmsd + relativedelta(years=MAIN_HIGHER_TENURE.get(grade))
+        tafmsd_years = TAFMSD.get(grade)
+        if tafmsd_years < 1:
+            months_total = int(tafmsd_years * 12)
+            tafmsd_required_date = formatted_tig_selection_month - relativedelta(months=months_total)
+        else:
+            months_component = int((tafmsd_years % 1) * 12)
+            years_component = int(tafmsd_years)
+            tafmsd_required_date = formatted_tig_selection_month - relativedelta(years=years_component,
+                                                                                 months=months_component)
+        hyt_years = MAIN_HIGHER_TENURE.get(grade)
+        if hyt_years < 1:
+            hyt_months_total = int(hyt_years * 12)
+            hyt_date = tafmsd + relativedelta(months=hyt_months_total)
+        else:
+            hyt_months_component = int((hyt_years % 1) * 12)
+            hyt_years_component = int(hyt_years)
+            hyt_date = tafmsd + relativedelta(years=hyt_years_component, months=hyt_months_component)
         mdos_month = f'{MDOS.get(grade)}-{year + 1}'
         mdos = datetime.strptime(mdos_month, "%d-%b-%Y")
         btz_check = None
@@ -101,7 +117,7 @@ def board_filter(grade, year, date_of_rank, uif_code, uif_disposition_date, tafm
                 return False, 'Failed A1C Check.'
         if grade in ('A1C', 'AMN', 'AB'):
             if three_year_tafmsd_check(scod_as_datetime, tafmsd):
-                return False, 'Over 36 months TIS.'
+                return False, 'SRA 2 Feb - 31 Mar or 3yr TIS'
         if date_of_rank is None or date_of_rank > tig_eligibility_month:
             return False, f'TIG: < {TIG_MONTHS_REQUIRED.get(grade)} months'
         if tafmsd > tafmsd_required_date:
