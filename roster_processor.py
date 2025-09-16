@@ -73,6 +73,14 @@ def roster_processor(roster_df, session_id, cycle, year):
             error_log.append(f"Unknown or unsupported rank: {row['GRADE']} for {row['FULL_NAME']}")
             continue
 
+        # Check projected grades
+        if row['GRADE_PERM_PROJ'] == cycle:
+            ineligible_service_members.append(index)
+            reason_for_ineligible_map[index] = f'Projected for {cycle}.'
+            continue
+        elif row['GRADE_PERM_PROJ'] == PROMOTIONAL_MAP.get(cycle):
+            continue
+
         # Early filtering - only process personnel eligible for this promotion cycle
         if not (row['GRADE'] == cycle or (row['GRADE'] == 'A1C' and cycle == 'SRA')):
             continue
@@ -99,13 +107,6 @@ def roster_processor(roster_df, session_id, cycle, year):
             pascodes.append(row['ASSIGNED_PAS'])
             pascodeUnitMap[row['ASSIGNED_PAS']] = row['ASSIGNED_PAS_CLEARTEXT']
 
-        # Check projected grades
-        if row['GRADE_PERM_PROJ'] == cycle:
-            ineligible_service_members.append(index)
-            reason_for_ineligible_map[index] = f'Projected for {cycle}.'
-            continue
-        elif row['GRADE_PERM_PROJ'] == PROMOTIONAL_MAP.get(cycle):
-            continue
 
         # Board filter check
         member_status = board_filter(row['GRADE'], year, row['DOR'], row['UIF_CODE'],
